@@ -17,6 +17,7 @@ public class OtelCollector : ComponentResource
 {
 
     public Output<string> CollectorHostname;
+
     public OtelCollector(string name, OtelCollectorArgs args, ComponentResourceOptions? options = null) : 
         base("azure-metrics:otel-collector:app", name, args, options)
     {
@@ -151,6 +152,14 @@ public class OtelCollector : ComponentResource
                         new EnvironmentVarArgs {
                             Name = "CONFIG_FILE_HASH", // used to trigger revision updates
                             Value = configHash
+                        },
+                        new EnvironmentVarArgs {
+                            Name = "EVENTHUB_CONNECTION_STRING",
+                            Value = args.EventHubConnectionString
+                        },
+                        new EnvironmentVarArgs {
+                            Name = "EVENTHUB_CONSUMER_GROUP",
+                            Value = args.EventHubConsumerGroup
                         }
                     },
                     Probes = {
@@ -184,4 +193,6 @@ public class OtelCollector : ComponentResource
 public class OtelCollectorArgs : ResourceArgs
 {
     public Input<string> ResourceGroup { get; set; } = null!;
+    public Input<string> EventHubConsumerGroup { get; set; } = null!;
+    public Input<string> EventHubConnectionString { get; set; } = null!;
 }

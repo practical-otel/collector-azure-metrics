@@ -1,23 +1,26 @@
 ﻿using infra;
 using Pulumi;
 using Pulumi.AzureNative.Resources;
-using Pulumi.AzureNative.Storage;
-using Pulumi.AzureNative.Storage.Inputs;
 using System.Collections.Generic;
 
 return await Pulumi.Deployment.RunAsync(() =>
 {
-    // Create an Azure Resource Group
     var resourceGroup = new ResourceGroup("resourceGroup");
 
-    var collector = new OtelCollector("collector", new OtelCollectorArgs {
-        ResourceGroup = resourceGroup.Name
+    var ingestEventHub = new IngestEventHub("ingest", new IngestEventHubArgs {
+        ResourceGroupName = resourceGroup.Name
     });
 
+    var collector = new OtelCollector("collector", new OtelCollectorArgs {
+        ResourceGroup = resourceGroup.Name,
+        EventHubConnectionString = ingestEventHub.ConnectionString,
+        EventHubConsumerGroup = ingestEventHub.ConsumerGroup,
+    });
 
-    // Export the primary key of the Storage Account
     return new Dictionary<string, object?>
     {
-        ["collector"] = collector.CollectorHostname
+        ["collector"] = Output.Format($"https://{collector.CollectorHostname}/v1/traces"),
+        ["ingest"] = ingestEventHub.EventHubName,
+        ["connectionString"] = ingestEventHub.ConnectionString,
     };
 });

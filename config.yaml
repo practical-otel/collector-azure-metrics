@@ -3,6 +3,10 @@ receivers:
     protocols:
       http:
         endpoint: 0.0.0.0:4318
+  azureeventhub:
+    connection: ${env:EVENTHUB_CONNECTION_STRING}
+    group: ${env:EVENTHUB_CONSUMER_GROUP}
+    format: "azure"
 
 processors:
   batch:
@@ -12,17 +16,27 @@ exporters:
     endpoint: "api.honeycomb.io:443"
     headers:
       "x-honeycomb-team": "${env:HONEYCOMB_API_KEY}"
+  otlp/azure:
+    endpoint: "api.honeycomb.io:443"
+    headers:
+      "x-honeycomb-team": "${env:HONEYCOMB_API_KEY}"
+      "x-honeycomb-dataset": "azure-metrics"
   otlp/logs:
     endpoint: "api.honeycomb.io:443"
     headers:
       "x-honeycomb-team": "${env:HONEYCOMB_API_KEY}"
       "x-honeycomb-dataset": "azure-logs"
+  debug:
+    verbosity: detailed
 
 extensions: 
   health_check:
     endpoint: 0.0.0.0:13133
 
 service:
+  # telemetry:
+  #   logs:
+  #     level: DEBUG
   extensions: [health_check]
   pipelines:
     traces:
@@ -33,6 +47,9 @@ service:
       receivers: [otlp]
       processors: [batch]
       exporters: [otlp]
+    metrics/azure:
+      receivers: [azureeventhub]
+      exporters: [debug, otlp/azure]
     logs:
       receivers: [otlp]
       processors: [batch]
