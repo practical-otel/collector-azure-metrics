@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using Pulumi;
 using Pulumi.AzureNative.App;
 using Pulumi.AzureNative.App.Inputs;
+using Pulumi.AzureNative.App.Outputs;
 using Pulumi.AzureNative.Storage;
 using Pulumi.AzureNative.Storage.Inputs;
 using Pulumi.Command.Local;
@@ -16,7 +17,10 @@ namespace infra;
 public class OtelCollector : ComponentResource
 {
 
-    public Output<string> CollectorHostname;
+    public Output<string> CollectorHostname { get; private set; }
+
+    public Output<ManagedServiceIdentityResponse?> Identity { get; private set; }
+    public Output<string> RevisionName { get; }
 
     public OtelCollector(string name, OtelCollectorArgs args, ComponentResourceOptions? options = null) : 
         base("azure-metrics:otel-collector:app", name, args, options)
@@ -105,6 +109,10 @@ public class OtelCollector : ComponentResource
             EnvironmentId = containerAppEnvironment.Id,
             ResourceGroupName = args.ResourceGroup,
             ContainerAppName = "collector",
+            Identity = new ManagedServiceIdentityArgs
+            {
+                Type = ManagedServiceIdentityType.SystemAssigned
+            },
             Configuration = new ConfigurationArgs
             {
                 Ingress = new IngressArgs
@@ -113,9 +121,9 @@ public class OtelCollector : ComponentResource
                     TargetPort = 4318
                 },
                 Secrets = {
-                honeycombApiKeySecret
-            },
-
+                    honeycombApiKeySecret
+                },
+                
             },
             Template = new TemplateArgs
             {
@@ -154,13 +162,17 @@ public class OtelCollector : ComponentResource
                             Value = configHash
                         },
                         new EnvironmentVarArgs {
-                            Name = "EVENTHUB_CONNECTION_STRING",
-                            Value = args.EventHubConnectionString
+                            Name = "EVENTHUB_CONNECTION_STRING_LOGS",
+                            Value = args.EventHubConnectionStringLogs
                         },
                         new EnvironmentVarArgs {
                             Name = "EVENTHUB_CONSUMER_GROUP",
                             Value = args.EventHubConsumerGroup
-                        }
+                        },
+                        new EnvironmentVarArgs {
+                            Name = "EVENTHUB_CONNECTION_STRING_METRICS",
+                            Value = args.EventHubConnectionStringMetrics
+                        },
                     },
                     Probes = {
                         new ContainerAppProbeArgs {
@@ -186,7 +198,9 @@ public class OtelCollector : ComponentResource
             DependsOn = { configFileUpload }
         });
 
-        CollectorHostname = collectorApp.LatestRevisionFqdn;
+        CollectorHostname = collectorApp.Configuration.Apply(c => c!.Ingress!.Fqdn);
+        Identity = collectorApp.Identity;
+        RevisionName = collectorApp.LatestRevisionName;
     }
 }
 
@@ -194,5 +208,6 @@ public class OtelCollectorArgs : ResourceArgs
 {
     public Input<string> ResourceGroup { get; set; } = null!;
     public Input<string> EventHubConsumerGroup { get; set; } = null!;
-    public Input<string> EventHubConnectionString { get; set; } = null!;
+    public Input<string> EventHubConnectionStringMetrics { get; set; } = null!;
+    public Input<string> EventHubConnectionStringLogs { get; set; } = null!;
 }

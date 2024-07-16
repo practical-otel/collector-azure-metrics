@@ -13,7 +13,8 @@ return await Pulumi.Deployment.RunAsync(() =>
 
     var collector = new OtelCollector("collector", new OtelCollectorArgs {
         ResourceGroup = resourceGroup.Name,
-        EventHubConnectionString = ingestEventHub.ConnectionString,
+        EventHubConnectionStringLogs = ingestEventHub.HubConnectionStringLogs,
+        EventHubConnectionStringMetrics = ingestEventHub.HubConnectionStringMetrics,
         EventHubConsumerGroup = ingestEventHub.ConsumerGroup,
     });
 
@@ -21,6 +22,7 @@ return await Pulumi.Deployment.RunAsync(() =>
     {
         ["collector"] = Output.Format($"https://{collector.CollectorHostname}/v1/traces"),
         ["ingest"] = ingestEventHub.EventHubName,
-        ["connectionString"] = ingestEventHub.ConnectionString,
+        ["identity"] = collector.Identity.Apply(i => i!.PrincipalId),
+        ["latest-revision-name"] = collector.RevisionName
     };
 });

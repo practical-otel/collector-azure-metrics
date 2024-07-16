@@ -1,27 +1,28 @@
 receivers:
-  otlp:
-    protocols:
-      http:
-        endpoint: 0.0.0.0:4318
-  azureeventhub:
-    connection: ${env:EVENTHUB_CONNECTION_STRING}
+  azureeventhub/logs:
+    connection: ${env:EVENTHUB_CONNECTION_STRING_LOGS}
     group: ${env:EVENTHUB_CONSUMER_GROUP}
     format: "azure"
-
+  azureeventhub/metrics:
+    connection: ${env:EVENTHUB_CONNECTION_STRING_METRICS}
+    group: ${env:EVENTHUB_CONSUMER_GROUP}
+    format: "azure"
+ 
 processors:
   batch:
+  transform/flatten_azure_logs:
+    log_statements:
+      - context: log
+        statements:
+          - flatten(attributes["azure.properties.log"], "azure.properties.expanded") where attributes["azure.properties.log"] != nil
 
 exporters:
-  otlp:
-    endpoint: "api.honeycomb.io:443"
-    headers:
-      "x-honeycomb-team": "${env:HONEYCOMB_API_KEY}"
-  otlp/azure:
+  otlp/honeycomb-metrics:
     endpoint: "api.honeycomb.io:443"
     headers:
       "x-honeycomb-team": "${env:HONEYCOMB_API_KEY}"
       "x-honeycomb-dataset": "azure-metrics"
-  otlp/logs:
+  otlp/honeycomb-logs:
     endpoint: "api.honeycomb.io:443"
     headers:
       "x-honeycomb-team": "${env:HONEYCOMB_API_KEY}"
@@ -34,23 +35,16 @@ extensions:
     endpoint: 0.0.0.0:13133
 
 service:
-  # telemetry:
-  #   logs:
-  #     level: DEBUG
+  telemetry:
+    logs:
+      level: DEBUG
   extensions: [health_check]
   pipelines:
-    traces:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [otlp]
-    metrics:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [otlp]
     metrics/azure:
-      receivers: [azureeventhub]
-      exporters: [debug, otlp/azure]
-    logs:
-      receivers: [otlp]
+      receivers: [azureeventhub/metrics]
       processors: [batch]
-      exporters: [otlp/logs]
+      exporters: [otlp/honeycomb-metrics]
+    logs/azure:
+      receivers: [azureeventhub/logs]
+      processors: [transform/flatten_azure_logs, batch]
+      exporters: [otlp/honeycomb-logs]
