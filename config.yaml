@@ -10,11 +10,16 @@ receivers:
  
 processors:
   batch:
-  transform/flatten_azure_logs:
-    log_statements:
-      - context: log
-        statements:
-          - flatten(attributes["azure.properties.log"], "azure.properties.expanded") where attributes["azure.properties.log"] != nil
+  # transform/flatten_azure_logs:
+  #   log_statements:
+  #     - context: log
+  #       statements:
+  #         - flatten(attributes["azure.properties"], "azure.properties.expanded") where attributes["azure.properties"] != nil
+
+  # filter/only_azure_logs:
+  #   logs:
+  #     log_record:
+  #       - attributes["azure.properties.log"] != nil
 
 exporters:
   otlp/honeycomb-metrics:
@@ -26,7 +31,7 @@ exporters:
     endpoint: "api.honeycomb.io:443"
     headers:
       "x-honeycomb-team": "${env:HONEYCOMB_API_KEY}"
-      "x-honeycomb-dataset": "azure-logs"
+      "x-honeycomb-dataset": "azure-logs2"
   debug:
     verbosity: detailed
 
@@ -46,5 +51,9 @@ service:
       exporters: [otlp/honeycomb-metrics]
     logs/azure:
       receivers: [azureeventhub/logs]
-      processors: [transform/flatten_azure_logs, batch]
+      #processors: [transform/flatten_azure_logs, batch]
       exporters: [otlp/honeycomb-logs]
+    # logs/debug:
+    #   receivers: [azureeventhub/logs]
+    #   processors: [filter/only_azure_logs, batch]
+    #   exporters: [debug]

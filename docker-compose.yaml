@@ -1,0 +1,12 @@
+services:
+  collector:
+    image: otel/opentelemetry-collector-contrib:0.104.0
+    volumes:
+      - ./config-local.yaml:/etc/otelcol-contrib/config.yaml
+      - ./collector_storage:/var/lib/otelcol/storage
+    environment:
+      EVENTHUB_CONSUMER_GROUP: "collector"
+
+
+volumes:
+  collector_storage:
