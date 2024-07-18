@@ -51,6 +51,14 @@ public class OtelCollector : ComponentResource
             ShareName = "config",
         });
 
+        var stateFileShare = new FileShare("fileShare-state", new()
+        {
+            ResourceGroupName = args.ResourceGroup,
+            AccountName = storageAccount.Name,
+            EnabledProtocols = "SMB",
+            ShareName = "state",
+        });
+
         var storageAccountKeys = ListStorageAccountKeys.Invoke(new ListStorageAccountKeysInvokeArgs
         {
             ResourceGroupName = args.ResourceGroup,
@@ -104,6 +112,23 @@ public class OtelCollector : ComponentResource
             }
         });
 
+        var stateFileShareStorage = new ManagedEnvironmentsStorage("collector-env-storage-state", new ManagedEnvironmentsStorageArgs
+        {
+            ResourceGroupName = args.ResourceGroup,
+            EnvironmentName = containerAppEnvironment.Name,
+            StorageName = "collector-state",
+            Properties = new ManagedEnvironmentStoragePropertiesArgs
+            {
+                AzureFile = new AzureFilePropertiesArgs
+                {
+                    AccessMode = "ReadWrite",
+                    ShareName = stateFileShare.Name,
+                    AccountKey = storageAccountKeys.Apply(k => k.Keys[0].Value),
+                    AccountName = storageAccount.Name,
+                }
+            }
+        });
+
         var collectorApp = new ContainerApp("collector", new ContainerAppArgs
         {
             EnvironmentId = containerAppEnvironment.Id,
@@ -133,13 +158,19 @@ public class OtelCollector : ComponentResource
                     MaxReplicas = 1,
                 },
                 Volumes = {
-                new VolumeArgs
-                {
-                    Name = "config",
-                    StorageType = StorageType.AzureFile,
-                    StorageName = containerAppEnvironmentStorage.Name,
-                }
-            },
+                    new VolumeArgs
+                        {
+                            Name = "config",
+                            StorageType = StorageType.AzureFile,
+                            StorageName = containerAppEnvironmentStorage.Name,
+                        },
+                    new VolumeArgs
+                        {
+                            Name = "state",
+                            StorageType = StorageType.AzureFile,
+                            StorageName = stateFileShareStorage.Name,
+                        }
+                },
                 Containers = {
                 new ContainerArgs
                 {
@@ -150,6 +181,11 @@ public class OtelCollector : ComponentResource
                         {
                             VolumeName = "config",
                             MountPath = "/etc/otelcol-contrib",
+                        },
+                        new VolumeMountArgs
+                        {
+                            VolumeName = "state",
+                            MountPath = "/var/lib/otelcol/state",
                         }
                     },
                     Env = {
