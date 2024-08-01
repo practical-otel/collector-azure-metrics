@@ -3,18 +3,43 @@ receivers:
     connection: ${env:EVENTHUB_CONNECTION_STRING_LOGS}
     group: ${env:EVENTHUB_CONSUMER_GROUP}
     format: "azure"
+    storage: file_storage/local
   azureeventhub/metrics:
     connection: ${env:EVENTHUB_CONNECTION_STRING_METRICS}
     group: ${env:EVENTHUB_CONSUMER_GROUP}
     format: "azure"
+    storage: file_storage/local
  
 processors:
   batch:
   transform/flatten_azure_logs:
     log_statements:
       - context: log
+        conditions:
+          - attributes["azure.properties"] != nil and IsMap(attributes["azure.properties"])
         statements:
-          - flatten(attributes["azure.properties.log"], "azure.properties.expanded") where attributes["azure.properties.log"] != nil
+          - flatten(attributes["azure.properties"], "azure.properties", 2)
+          - merge_maps(attributes, attributes["azure.properties"], "upsert") 
+          - delete_key(attributes, "azure.properties")      
+      - context: log
+        conditions:
+          - attributes["azure.properties.log"] != nil and Substring(attributes["azure.properties.log"], 0, 2) == "{\""
+        statements:
+          - set(attributes["azure.properties.log_map"], ParseJSON(attributes["azure.properties.log"])) 
+          - flatten(attributes["azure.properties.log_map"], "azure.properties.log") 
+          - merge_maps(attributes, attributes["azure.properties.log_map"], "upsert")
+          - delete_key(attributes, "azure.properties.log")
+          - delete_key(attributes, "azure.properties.log_map")
+
+  transform/normalize_azure_logs:
+    log_statements:
+      - context: log
+        statements:
+          - set(resource.attributes["k8s.pod.name"], attributes["azure.properties.pod"])
+          - delete_key(attributes, "azure.properties.pod")
+          - set(resource.attributes["container.id"], attributes["azure.properties.containerID"])
+          - delete_key(attributes, "azure.properties.containerID")
+
 
 exporters:
   otlp/honeycomb-metrics:
@@ -33,12 +58,11 @@ exporters:
 extensions: 
   health_check:
     endpoint: 0.0.0.0:13133
+  file_storage/local:
+    directory: /var/lib/otelcol/state
 
 service:
-  telemetry:
-    logs:
-      level: DEBUG
-  extensions: [health_check]
+  extensions: [health_check, file_storage/local]
   pipelines:
     metrics/azure:
       receivers: [azureeventhub/metrics]
@@ -46,5 +70,8 @@ service:
       exporters: [otlp/honeycomb-metrics]
     logs/azure:
       receivers: [azureeventhub/logs]
-      processors: [transform/flatten_azure_logs, batch]
+      processors:
+        - transform/flatten_azure_logs
+        - transform/normalize_azure_logs
+        - batch
       exporters: [otlp/honeycomb-logs]
